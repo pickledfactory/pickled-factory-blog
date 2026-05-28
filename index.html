@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blog Publisher — The Pickled Factory</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=DM+Mono:wght@500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0c0c0c; --surface: #141414; --surface2: #1c1c1c;
+  --border: rgba(255,255,255,0.07); --border2: rgba(255,255,255,0.13);
+  --text: #ede9e3; --muted: #777; --muted2: #555;
+  --gold: #c8a96e; --green: #4a9e6e; --radius: 12px;
+}
+body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+.hdr { padding: 1.5rem 2rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 1rem; background: var(--surface); position: sticky; top: 0; z-index: 10; }
+.logo { width: 38px; height: 38px; background: var(--gold); border-radius: 9px; display: grid; place-items: center; font-family: 'Playfair Display', serif; font-size: 19px; color: #0c0c0c; flex-shrink: 0; }
+.hdr h1 { font-size: 14px; font-weight: 500; }
+.hdr p { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.main { max-width: 860px; margin: 0 auto; padding: 2.5rem 2rem; }
+.section-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 12px; }
+.pills { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 2rem; }
+.pill { padding: 7px 16px; border-radius: 999px; border: 1px solid var(--border2); font-size: 12px; color: var(--muted); cursor: pointer; background: var(--surface); font-family: 'DM Sans', sans-serif; transition: all 0.15s; white-space: nowrap; }
+.pill:hover { border-color: var(--gold); color: var(--gold); }
+.pill.on { background: var(--gold); color: #0c0c0c; border-color: var(--gold); font-weight: 500; }
+.btn-row { display: flex; gap: 12px; margin-bottom: 2rem; }
+.gen-btn { flex: 1; padding: 16px; background: var(--gold); color: #0c0c0c; border: none; border-radius: var(--radius); font-size: 16px; font-weight: 500; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: opacity 0.15s; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.gen-btn:hover { opacity: 0.88; }
+.gen-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.pub-btn { padding: 16px 28px; background: var(--green); color: #fff; border: none; border-radius: var(--radius); font-size: 15px; font-weight: 500; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: opacity 0.15s; display: none; align-items: center; gap: 8px; white-space: nowrap; }
+.pub-btn.show { display: flex; }
+.pub-btn:hover { opacity: 0.88; }
+.pub-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.status { text-align: center; font-size: 13px; color: var(--muted); min-height: 20px; margin-bottom: 1rem; }
+.status.err { color: #e07070; }
+#out { display: none; }
+#out.show { display: block; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.25rem; }
+.card-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.card-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
+.copy-btn { display: inline-flex; align-items: center; gap: 5px; padding: 5px 12px; border-radius: 6px; border: 1px solid var(--border2); font-size: 11px; color: var(--muted); cursor: pointer; background: transparent; font-family: 'DM Sans', sans-serif; transition: all 0.15s; white-space: nowrap; }
+.copy-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.25); }
+.copy-btn.copied { color: var(--green); border-color: var(--green); }
+#outTitle { font-family: 'Playfair Display', serif; font-size: 26px; line-height: 1.3; }
+canvas { width: 100%; display: block; border-radius: 8px; }
+.img-note { font-size: 11px; color: var(--muted2); margin-top: 8px; }
+#outExcerpt { font-size: 15px; line-height: 1.7; }
+.html-box { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; font-family: 'DM Mono', monospace; font-size: 11.5px; color: #999; max-height: 220px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; line-height: 1.6; }
+.seo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.seo-item label { font-size: 10px; color: var(--muted2); text-transform: uppercase; letter-spacing: 0.08em; display: block; margin-bottom: 5px; }
+.seo-item .val { font-size: 13px; color: var(--text); line-height: 1.5; }
+.seo-item .val.mono { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--gold); }
+.seo-item.full { grid-column: 1/-1; }
+.tag { display: inline-block; padding: 3px 10px; border-radius: 999px; background: rgba(200,169,110,0.1); border: 1px solid rgba(200,169,110,0.25); font-size: 11px; color: var(--gold); margin: 2px; }
+.success-banner { background: rgba(74,158,110,0.1); border: 1px solid rgba(74,158,110,0.3); border-radius: var(--radius); padding: 1.25rem 1.5rem; margin-bottom: 1.25rem; display: none; }
+.success-banner.show { display: block; }
+.success-banner h3 { font-size: 14px; font-weight: 500; color: var(--green); margin-bottom: 8px; }
+.success-banner a { color: var(--gold); font-size: 13px; display: block; margin-top: 4px; }
+.again-btn { width: 100%; padding: 13px; background: transparent; border: 1px solid var(--border2); border-radius: var(--radius); font-size: 14px; color: var(--muted); cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all 0.15s; margin-top: 1rem; }
+.again-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.25); }
+.spin { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(0,0,0,0.2); border-top-color: #0c0c0c; border-radius: 50%; animation: sp 0.7s linear infinite; }
+.spin-w { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.2); border-top-color: #fff; border-radius: 50%; animation: sp 0.7s linear infinite; }
+@keyframes sp { to { transform: rotate(360deg); } }
+::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+@media (max-width: 600px) { .seo-grid { grid-template-columns: 1fr; } .main { padding: 1.5rem 1rem; } .btn-row { flex-direction: column; } }
+</style>
+</head>
+<body>
+<header class="hdr">
+  <div class="logo">P</div>
+  <div>
+    <h1>Blog Publisher — The Pickled Factory</h1>
+    <p>Generate SEO-ready posts & publish directly to Shopify</p>
+  </div>
+</header>
+<main class="main">
+  <div class="section-label">Topic focus</div>
+  <div class="pills" id="pills">
+    <button class="pill on" data-t="random">✦ Random</button>
+    <button class="pill" data-t="self-inking stamps">Self-inking stamps</button>
+    <button class="pill" data-t="custom embossers">Embossers</button>
+    <button class="pill" data-t="pre-inked stamps">Pre-inked stamps</button>
+    <button class="pill" data-t="wood handle stamps">Wood handle stamps</button>
+    <button class="pill" data-t="personalised gifts">Personalised gifts</button>
+    <button class="pill" data-t="custom stickers">Custom stickers</button>
+    <button class="pill" data-t="acrylic signage">Acrylic signage</button>
+    <button class="pill" data-t="business branding">Business branding</button>
+    <button class="pill" data-t="wedding stamps">Wedding & events</button>
+    <button class="pill" data-t="foil stickers">Foil stickers</button>
+    <button class="pill" data-t="address stamps">Address stamps</button>
+    <button class="pill" data-t="notary stamps">Notary & legal</button>
+  </div>
+  <div class="btn-row">
+    <button class="gen-btn" id="genBtn" onclick="generate()">✦ Create blog post</button>
+    <button class="pub-btn" id="pubBtn" onclick="publish()">⬆ Publish to Shopify</button>
+  </div>
+  <div class="status" id="status"></div>
+
+  <div class="success-banner" id="successBanner">
+    <h3>✓ Published to Shopify!</h3>
+    <a id="adminLink" href="#" target="_blank">View in Shopify admin →</a>
+    <a id="liveLink" href="#" target="_blank">View live post →</a>
+  </div>
+
+  <div id="out">
+    <div class="card">
+      <div class="card-hdr"><span class="card-title">Title</span><button class="copy-btn" onclick="cp('outTitle',this)">⎘ Copy</button></div>
+      <div id="outTitle"></div>
+    </div>
+    <div class="card">
+      <div class="card-hdr"><span class="card-title">Featured image — auto-uploaded on publish, or download manually</span><button class="copy-btn" onclick="dlImg()">↓ Download</button></div>
+      <canvas id="cv" height="630"></canvas>
+    </div>
+    <div class="card">
+      <div class="card-hdr"><span class="card-title">Excerpt</span><button class="copy-btn" onclick="cp('outExcerpt',this)">⎘ Copy</button></div>
+      <div id="outExcerpt"></div>
+    </div>
+    <div class="card">
+      <div class="card-hdr"><span class="card-title">Content HTML</span><button class="copy-btn" onclick="cp('outHtml',this)">⎘ Copy HTML</button></div>
+      <div class="html-box" id="outHtml"></div>
+    </div>
+    <div class="card">
+      <div class="card-hdr"><span class="card-title">SEO & Meta</span><button class="copy-btn" onclick="cpSeo(this)">⎘ Copy all</button></div>
+      <div class="seo-grid">
+        <div class="seo-item"><label>Page title</label><div class="val" id="outSeoTitle"></div></div>
+        <div class="seo-item"><label>URL handle</label><div class="val mono" id="outHandle"></div></div>
+        <div class="seo-item full"><label>Meta description</label><div class="val" id="outMeta"></div></div>
+        <div class="seo-item full"><label>Tags</label><div id="outTags"></div></div>
+      </div>
+    </div>
+    <button class="again-btn" onclick="reset()">↺ Generate another post</button>
+  </div>
+</main>
+<script>
+const URLS=[['self-inking stamps','https://www.thepickledfactory.com.au/collections/rubber-stamps'],['wooden handle stamps','https://www.thepickledfactory.com.au/collections/wood-handle-stamps'],['pre-inked stamps','https://www.thepickledfactory.com.au/collections/pre-inked-stamps'],['custom embossers','https://www.thepickledfactory.com.au/products/custom-logo-embosser-stamp'],['foil stickers','https://www.thepickledfactory.com.au/collections/foil-stickers'],['vinyl stickers','https://www.thepickledfactory.com.au/collections/vinyl-stickers'],['personalised gifts','https://www.thepickledfactory.com.au/collections/personalised-gifts'],['acrylic signage','https://www.thepickledfactory.com.au/collections/acrylic-signage'],['custom mugs','https://www.thepickledfactory.com.au/products/custommug'],['cheese board sets','https://www.thepickledfactory.com.au/products/5-piece-cheese-knife-board-set'],['personalised cutting boards','https://www.thepickledfactory.com.au/products/personalised-bamboo-cutting-boards'],['acrylic wall art','https://www.thepickledfactory.com.au/products/acrylic-wall-art-customised'],['logo stamps','https://www.thepickledfactory.com.au/pages/custom-branding-stamps-australia'],['return address stamps','https://www.thepickledfactory.com.au/pages/custom-return-address-stamps-australia'],['business rubber stamps','https://www.thepickledfactory.com.au/pages/business-rubber-stamps-australia-custom-office-logo-stamps'],['ink pads and ink','https://www.thepickledfactory.com.au/collections/rubber-stamp-ink-pads'],['baby name plaques','https://www.thepickledfactory.com.au/products/wooden-birth-announcement-plaque-baby-name-plaque-baby-announcement'],['custom night lights','https://www.thepickledfactory.com.au/products/custom-night-light-black-acrylic-led-base-night-light-usb-cable-remote-control']];
+
+let topic='random', blog={};
+
+document.getElementById('pills').addEventListener('click',e=>{
+  const p=e.target.closest('.pill');if(!p)return;
+  document.querySelectorAll('.pill').forEach(x=>x.classList.remove('on'));
+  p.classList.add('on');topic=p.dataset.t;
+});
+
+async function generate(){
+  const btn=document.getElementById('genBtn'),st=document.getElementById('status');
+  btn.disabled=true;btn.innerHTML='<span class="spin"></span> Writing your blog post...';
+  st.className='status';st.textContent='';
+  document.getElementById('out').classList.remove('show');
+  document.getElementById('pubBtn').classList.remove('show');
+  document.getElementById('successBanner').classList.remove('show');
+
+  const topicLine=topic==='random'?'Choose a specific niche angle. E.g. "5 creative ways to use a custom embosser for wedding stationery", "Why pre-inked stamps are better for high-volume use".':
+    `Topic: ${topic}. Pick a specific, practical angle.`;
+  const urlList=URLS.map(([a,u])=>`- "${a}" → ${u}`).join('\n');
+  const prompt=`You are an expert SEO content writer for The Pickled Factory (thepickledfactory.com.au), an Australian business in Mulgrave, Victoria. Products: custom self-inking stamps, wooden handle stamps, pre-inked stamps, custom embossers, foil stickers, vinyl stickers, personalised gifts (cheese boards, mugs, cutting boards, acrylic wall art, night lights, baby name plaques, drink bottles, ornaments, bottle openers), acrylic signage, custom mugs.\n\n${topicLine}\n\nReturn ONLY valid JSON no markdown no backticks:\n{"title":"...","excerpt":"...","content_html":"...","seo_title":"...","meta_description":"...","url_handle":"...","tags":["..."],"image_headline":"...","image_subline":"...","image_color_hex":"..."}\n\nRules:\n- title: benefit-driven keyword-rich max 70 chars human tone never start with Discover or Unlock\n- excerpt: 1-2 sentence hook max 155 chars\n- content_html: 700-900 words using h2 h3 p ul li strong. Include 4-6 internal links from:\n${urlList}\n  Format <a href="URL">anchor text</a>. Write like knowledgeable Australian small business owner using we and our. Mention free Australia-wide shipping naturally.\n- seo_title: max 60 chars keyword-first include Australia where natural\n- meta_description: 148-158 chars ends with soft CTA\n- url_handle: lowercase hyphens only max 50 chars\n- tags: 6-8 tags string array\n- image_headline: 3-5 punchy words e.g. Leave Your Mark\n- image_subline: 5-8 word tagline\n- image_color_hex: ONE of: #1a2e4a #1c3a2e #2d3142 #6b3a2a #2d1b4e #1e1e2e #0d2b2b #3a2020 #1a3a3a #2a1f3d #243642 #3d2414 vary each call`;
+
+  try {
+    const r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:[{role:'user',content:prompt}]})});
+    const text=await r.text();
+    let d;try{d=JSON.parse(text);}catch(e){throw new Error('Bad response: '+text.slice(0,150));}
+    if(d.error)throw new Error(typeof d.error==='object'?JSON.stringify(d.error):d.error);
+    const raw=(d.content||[]).map(c=>c.text||'').join('');
+    blog=JSON.parse(raw.replace(/```json|```/g,'').trim());
+    document.getElementById('outTitle').textContent=blog.title;
+    document.getElementById('outExcerpt').textContent=blog.excerpt;
+    document.getElementById('outHtml').textContent=blog.content_html;
+    document.getElementById('outSeoTitle').textContent=blog.seo_title;
+    document.getElementById('outHandle').textContent=blog.url_handle;
+    document.getElementById('outMeta').textContent=blog.meta_description;
+    document.getElementById('outTags').innerHTML=(blog.tags||[]).map(t=>`<span class="tag">${t}</span>`).join('');
+    drawImg(blog.image_headline,blog.image_subline,blog.image_color_hex||'#1a2e4a');
+    document.getElementById('out').classList.add('show');
+    document.getElementById('pubBtn').classList.add('show');
+    st.textContent='';
+  } catch(e){st.className='status err';st.textContent='Error: '+e.message;}
+  btn.disabled=false;btn.innerHTML='✦ Create blog post';
+}
+
+async function publish(){
+  const btn=document.getElementById('pubBtn'),st=document.getElementById('status');
+  btn.disabled=true;btn.innerHTML='<span class="spin-w"></span> Publishing...';
+  st.className='status';st.textContent='Publishing to Shopify...';
+  document.getElementById('successBanner').classList.remove('show');
+  try {
+    const r=await fetch('/api/publish',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(blog)});
+    const d=await r.json();
+    if(d.success){
+      document.getElementById('adminLink').href=d.admin_url;
+      document.getElementById('liveLink').href=d.live_url;
+      document.getElementById('successBanner').classList.add('show');
+      st.className='status';st.textContent='';
+      btn.innerHTML='✓ Published!';
+    } else {
+      throw new Error(d.error||(d.details?JSON.stringify(d.details):'Unknown error'));
+    }
+  } catch(e){
+    st.className='status err';st.textContent='Publish failed: '+e.message;
+    btn.disabled=false;btn.innerHTML='⬆ Publish to Shopify';
+  }
+}
+
+function reset(){
+  document.getElementById('out').classList.remove('show');
+  document.getElementById('pubBtn').classList.remove('show');
+  document.getElementById('successBanner').classList.remove('show');
+  document.getElementById('status').textContent='';
+  blog={};
+}
+
+function drawImg(hl,sub,bg){
+  const cv=document.getElementById('cv'),W=cv.width=1200,H=cv.height=630,ctx=cv.getContext('2d');
+  ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+  ctx.beginPath();ctx.arc(W-80,H+60,360,0,Math.PI*2);ctx.fillStyle='rgba(255,255,255,0.04)';ctx.fill();
+  ctx.beginPath();ctx.arc(W-80,H+60,260,0,Math.PI*2);ctx.fillStyle='rgba(255,255,255,0.04)';ctx.fill();
+  ctx.beginPath();ctx.arc(-40,-40,220,0,Math.PI*2);ctx.fillStyle='rgba(255,255,255,0.03)';ctx.fill();
+  ctx.save();ctx.translate(W-140,130);ctx.strokeStyle='rgba(255,255,255,0.15)';ctx.lineWidth=1.5;
+  [90,72,54].forEach(r=>{ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);ctx.stroke();});
+  ctx.fillStyle='rgba(255,255,255,0.1)';ctx.font='600 10px sans-serif';ctx.textAlign='center';
+  ctx.fillText('THE PICKLED',0,-5);ctx.fillText('FACTORY',0,9);ctx.restore();
+  ctx.fillStyle='rgba(255,255,255,0.4)';ctx.fillRect(80,H/2-22,44,1.5);
+  ctx.font='500 13px sans-serif';ctx.textAlign='left';ctx.fillStyle='rgba(255,255,255,0.4)';
+  ctx.fillText('THEPICKLEDFACTORY.COM.AU',80,H/2-34);
+  ctx.fillStyle='#fff';
+  const txt=(hl||'').toUpperCase(),fs=txt.length>22?54:txt.length>14?66:78;
+  ctx.font=`700 ${fs}px Georgia,serif`;
+  let y=H/2+18,line='',words=txt.split(' ');
+  words.forEach((w,i)=>{const t=line?line+' '+w:w;if(ctx.measureText(t).width>W-360&&line){ctx.fillText(line,80,y);y+=fs+10;line=w;}else line=t;if(i===words.length-1){ctx.fillText(line,80,y);y+=fs+10;}});
+  ctx.fillStyle='rgba(255,255,255,0.7)';ctx.font='400 25px sans-serif';ctx.fillText(sub||'',80,y+4);
+  ctx.fillStyle='rgba(0,0,0,0.25)';ctx.fillRect(0,H-54,W,54);
+  ctx.fillStyle='rgba(255,255,255,0.5)';ctx.font='400 14px sans-serif';
+  ctx.fillText('Custom Stamps · Embossers · Personalised Gifts · Free Shipping Australia-Wide',80,H-20);
+}
+
+function cp(id,btn){navigator.clipboard.writeText(document.getElementById(id).textContent);flash(btn);}
+function cpSeo(btn){navigator.clipboard.writeText(['Page title: '+document.getElementById('outSeoTitle').textContent,'URL handle: '+document.getElementById('outHandle').textContent,'Meta description: '+document.getElementById('outMeta').textContent,'Tags: '+(blog.tags||[]).join(', ')].join('\n'));flash(btn);}
+function flash(btn){const o=btn.innerHTML;btn.classList.add('copied');btn.textContent='✓ Copied';setTimeout(()=>{btn.classList.remove('copied');btn.innerHTML=o;},1500);}
+function dlImg(){const a=document.createElement('a');a.download=(blog.url_handle||'blog-image')+'.png';a.href=document.getElementById('cv').toDataURL('image/png');a.click();}
+</script>
+</body>
+</html>
