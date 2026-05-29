@@ -10,12 +10,12 @@ const SHOPIFY_TOKEN = process.env.SHOPIFY_TOKEN;
 const SHOPIFY_HOST = 'the-pickled-factory.myshopify.com';
 const BLOG_ID = '118414442769';
 
-function shopifyRequest(method, path, body) {
+function shopifyRequest(method, spath, body) {
   return new Promise((resolve, reject) => {
     const data = body ? JSON.stringify(body) : null;
     const req = https.request({
       hostname: SHOPIFY_HOST,
-      path: `/admin/api/2024-10/${path}`,
+      path: `/admin/api/2024-10/${spath}`,
       method,
       headers: {
         'Content-Type': 'application/json',
@@ -33,11 +33,12 @@ function shopifyRequest(method, path, body) {
   });
 }
 
-function anthropicRequest(messages) {
+function anthropicRequest(messages, system) {
   return new Promise((resolve, reject) => {
     const payload = JSON.stringify({
       model: 'claude-sonnet-4-5',
-      max_tokens: 4000,
+      max_tokens: 6000,
+      ...(system ? { system } : {}),
       messages
     });
     const req = https.request({
@@ -74,25 +75,29 @@ function json(res, status, data) {
   res.end(JSON.stringify(data));
 }
 
+function serveFile(res, filename, contentType) {
+  try {
+    const content = fs.readFileSync(path.join(__dirname, filename));
+    res.writeHead(200, { 'Content-Type': contentType });
+    res.end(content);
+  } catch(e) {
+    res.writeHead(404); res.end('Not found');
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   const parsed = url.parse(req.url, true);
   const pathname = parsed.pathname;
 
-  // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }
 
-  // Serve index.html
-  if (pathname === '/' || pathname === '/index.html') {
-    const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
-    res.writeHead(200, { 'Content-Type': 'text/html' });
-    res.end(html);
-    return;
-  }
+  // Pages
+  if (pathname === '/' || pathname === '/index.html') return serveFile(res, 'index.html', 'text/html');
 
-  // Generate blog
+  // Blog generate
   if (pathname === '/api/generate' && req.method === 'POST') {
     try {
       const body = await readBody(req);
@@ -100,18 +105,15 @@ const server = http.createServer(async (req, res) => {
       const result = await anthropicRequest(messages);
       res.writeHead(result.status, { 'Content-Type': 'application/json' });
       res.end(result.body);
-    } catch(e) {
-      json(res, 500, { error: e.message });
-    }
+    } catch(e) { json(res, 500, { error: e.message }); }
     return;
   }
 
-  // Publish to Shopify
+  // Blog publish
   if (pathname === '/api/publish' && req.method === 'POST') {
     try {
       const body = await readBody(req);
       const blog = JSON.parse(body);
-
       const article = {
         title: blog.title,
         body_html: blog.content_html,
@@ -124,10 +126,8 @@ const server = http.createServer(async (req, res) => {
           { namespace: 'global', key: 'description_tag', value: blog.meta_description, type: 'single_line_text_field' }
         ]
       };
-
       const result = await shopifyRequest('POST', `blogs/${BLOG_ID}/articles.json`, { article });
       const data = JSON.parse(result.body);
-
       if (result.status === 201) {
         json(res, 200, {
           success: true,
@@ -137,32 +137,137 @@ const server = http.createServer(async (req, res) => {
           live_url: `https://www.thepickledfactory.com.au/blogs/news/${data.article.handle}`
         });
       } else {
-        json(res, result.status, { error: 'Shopify rejected the article', details: data });
+        json(res, result.status, { error: 'Shopify rejected article', details: data });
       }
-    } catch(e) {
-      json(res, 500, { error: e.message });
-    }
+    } catch(e) { json(res, 500, { error: e.message }); }
     return;
   }
 
-  // Test endpoint
-  if (pathname === '/api/test') {
+  // Product research + generate
+  if (pathname === '/api/product' && req.method === 'POST') {
     try {
-      const shop = await shopifyRequest('GET', 'shop.json');
-      const shopData = JSON.parse(shop.body);
-      json(res, 200, {
-        shopify: shop.status === 200 ? 'connected' : 'failed',
-        shop_name: shopData.shop?.name,
-        anthropic_key: ANTHROPIC_API_KEY ? 'set' : 'missing',
-        shopify_token: SHOPIFY_TOKEN ? 'set' : 'missing'
-      });
-    } catch(e) {
-      json(res, 500, { error: e.message });
-    }
+      const body = await readBody(req);
+      const { description } = JSON.parse(body);
+
+      const system = `You are a product research and creation expert for The Pickled Factory (thepickledfactory.com.au), an Australian business selling custom acrylic signs, stamps, embossers, and personalised gifts. You have deep knowledge of Australian print and signage pricing, popular product sizes, and Shopify product listings.`;
+
+      const prompt = `A customer wants to create this product: "${description}"
+
+Research and generate a complete product for The Pickled Factory. Return ONLY valid JSON:
+
+{
+  "product_name": "...",
+  "tagline": "...",
+  "popular_sizes": [
+    {"size": "A5 (148 x 210mm)", "recommended": true, "reason": "..."},
+    {"size": "A4 (210 x 297mm)", "recommended": false, "reason": "..."}
+  ],
+  "recommended_size": "A5 (148 x 210mm)",
+  "recommended_dimensions_mm": {"width": 148, "height": 210},
+  "material": "...",
+  "thickness": "...",
+  "finish_options": ["Clear", "Frosted", "Mirror Gold", "Mirror Silver"],
+  "pricing": {
+    "cost_estimate_aud": 25,
+    "recommended_retail_aud": 65,
+    "market_range_aud": "55-85",
+    "pricing_notes": "..."
+  },
+  "shopify": {
+    "title": "...",
+    "description_html": "...",
+    "seo_title": "...",
+    "meta_description": "...",
+    "url_handle": "...",
+    "tags": ["..."],
+    "vendor": "The Pickled Factory",
+    "product_type": "Acrylic Sign",
+    "variants": [
+      {"title": "A5 / Clear", "price": "65.00", "sku": "ACR-MENU-A5-CLR"},
+      {"title": "A5 / Frosted", "price": "65.00", "sku": "ACR-MENU-A5-FRS"},
+      {"title": "A4 / Clear", "price": "85.00", "sku": "ACR-MENU-A4-CLR"}
+    ]
+  },
+  "design": {
+    "style": "elegant",
+    "primary_font": "Cormorant Garamond",
+    "secondary_font": "Montserrat",
+    "color_scheme": "gold on clear",
+    "accent_color_hex": "#c8a96e",
+    "bg_color_hex": "#f8f5f0",
+    "sample_content": {
+      "heading": "Signature Cocktails",
+      "subheading": "The Johnson Wedding · 14 June 2025",
+      "items": ["Aperol Spritz", "Hugo Spritz", "Classic Mojito", "Strawberry Daiquiri", "Sparkling Water", "Still Water"],
+      "footer": "Please drink responsibly"
+    },
+    "layout_notes": "..."
+  },
+  "market_research": {
+    "australia_market_notes": "...",
+    "competitors": ["..."],
+    "unique_selling_points": ["..."]
+  }
+}`;
+
+      const result = await anthropicRequest([{ role: 'user', content: prompt }], system);
+      const d = JSON.parse(result.body);
+      const raw = (d.content || []).map(c => c.text || '').join('');
+      const product = JSON.parse(raw.replace(/```json|```/g, '').trim());
+      json(res, 200, product);
+    } catch(e) { json(res, 500, { error: e.message }); }
+    return;
+  }
+
+  // Publish product to Shopify
+  if (pathname === '/api/publish-product' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const { product, imageBase64 } = JSON.parse(body);
+
+      const shopifyProduct = {
+        title: product.shopify.title,
+        body_html: product.shopify.description_html,
+        vendor: product.shopify.vendor,
+        product_type: product.shopify.product_type,
+        tags: (product.shopify.tags || []).join(', '),
+        handle: product.shopify.url_handle,
+        variants: product.shopify.variants.map(v => ({
+          title: v.title,
+          price: v.price,
+          sku: v.sku,
+          inventory_management: null,
+          fulfillment_service: 'manual'
+        })),
+        metafields: [
+          { namespace: 'global', key: 'title_tag', value: product.shopify.seo_title, type: 'single_line_text_field' },
+          { namespace: 'global', key: 'description_tag', value: product.shopify.meta_description, type: 'single_line_text_field' }
+        ]
+      };
+
+      // Add image if provided
+      if (imageBase64) {
+        shopifyProduct.images = [{ attachment: imageBase64, filename: (product.shopify.url_handle || 'product') + '.png' }];
+      }
+
+      const result = await shopifyRequest('POST', 'products.json', { product: shopifyProduct });
+      const data = JSON.parse(result.body);
+
+      if (result.status === 201) {
+        json(res, 200, {
+          success: true,
+          product_id: data.product.id,
+          admin_url: `https://admin.shopify.com/store/the-pickled-factory/products/${data.product.id}`,
+          live_url: `https://www.thepickledfactory.com.au/products/${data.product.handle}`
+        });
+      } else {
+        json(res, result.status, { error: 'Shopify rejected product', details: data });
+      }
+    } catch(e) { json(res, 500, { error: e.message }); }
     return;
   }
 
   res.writeHead(404); res.end('Not found');
 });
 
-server.listen(PORT, () => console.log(`Blog publisher running on port ${PORT}`));
+server.listen(PORT, () => console.log(`Running on port ${PORT}`));
