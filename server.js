@@ -94,7 +94,6 @@ const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }
 
-  // Pages
   if (pathname === '/' || pathname === '/index.html') return serveFile(res, 'index.html', 'text/html');
 
   // Blog generate
@@ -143,17 +142,15 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Product research + generate
+  // Product research
   if (pathname === '/api/product' && req.method === 'POST') {
     try {
       const body = await readBody(req);
       const { description } = JSON.parse(body);
-
-      const system = `You are a product research and creation expert for The Pickled Factory (thepickledfactory.com.au), an Australian business selling custom acrylic signs, stamps, embossers, and personalised gifts. You have deep knowledge of Australian print and signage pricing, popular product sizes, and Shopify product listings.`;
-
+      const system = `You are a product research and creation expert for The Pickled Factory (thepickledfactory.com.au), an Australian business selling custom acrylic signs, stamps, embossers, and personalised gifts.`;
       const prompt = `A customer wants to create this product: "${description}"
 
-Research and generate a complete product for The Pickled Factory. Return ONLY valid JSON:
+Research and generate a complete product for The Pickled Factory. Return ONLY valid JSON, no markdown, no backticks:
 
 {
   "product_name": "...",
@@ -164,9 +161,8 @@ Research and generate a complete product for The Pickled Factory. Return ONLY va
   ],
   "recommended_size": "A5 (148 x 210mm)",
   "recommended_dimensions_mm": {"width": 148, "height": 210},
-  "material": "...",
-  "thickness": "...",
-  "finish_options": ["Clear", "Frosted", "Mirror Gold", "Mirror Silver"],
+  "material": "3mm Acrylic",
+  "finish_options": ["Clear", "Frosted", "Mirror Gold", "Mirror Silver", "Black", "White"],
   "pricing": {
     "cost_estimate_aud": 25,
     "recommended_retail_aud": 65,
@@ -183,35 +179,28 @@ Research and generate a complete product for The Pickled Factory. Return ONLY va
     "vendor": "The Pickled Factory",
     "product_type": "Acrylic Sign",
     "variants": [
-      {"title": "A5 / Clear", "price": "65.00", "sku": "ACR-MENU-A5-CLR"},
-      {"title": "A5 / Frosted", "price": "65.00", "sku": "ACR-MENU-A5-FRS"},
-      {"title": "A4 / Clear", "price": "85.00", "sku": "ACR-MENU-A4-CLR"}
+      {"title": "A5 / Clear", "price": "65.00", "sku": "ACR-001-A5-CLR"},
+      {"title": "A5 / Frosted", "price": "65.00", "sku": "ACR-001-A5-FRS"},
+      {"title": "A4 / Clear", "price": "85.00", "sku": "ACR-001-A4-CLR"}
     ]
   },
   "design": {
-    "style": "elegant",
-    "primary_font": "Cormorant Garamond",
-    "secondary_font": "Montserrat",
-    "color_scheme": "gold on clear",
     "accent_color_hex": "#c8a96e",
-    "bg_color_hex": "#f8f5f0",
     "sample_content": {
       "heading": "Signature Cocktails",
       "subheading": "The Johnson Wedding · 14 June 2025",
       "items": ["Aperol Spritz", "Hugo Spritz", "Classic Mojito", "Strawberry Daiquiri", "Sparkling Water", "Still Water"],
       "footer": "Please drink responsibly"
-    },
-    "layout_notes": "..."
+    }
   },
   "market_research": {
     "australia_market_notes": "...",
-    "competitors": ["..."],
-    "unique_selling_points": ["..."]
+    "unique_selling_points": ["...", "..."]
   }
 }`;
-
       const result = await anthropicRequest([{ role: 'user', content: prompt }], system);
       const d = JSON.parse(result.body);
+      if (d.error) { json(res, 500, { error: d.error.message || JSON.stringify(d.error) }); return; }
       const raw = (d.content || []).map(c => c.text || '').join('');
       const product = JSON.parse(raw.replace(/```json|```/g, '').trim());
       json(res, 200, product);
@@ -219,50 +208,83 @@ Research and generate a complete product for The Pickled Factory. Return ONLY va
     return;
   }
 
-  // Publish product to Shopify
+  // Publish product — with full error detail
   if (pathname === '/api/publish-product' && req.method === 'POST') {
     try {
       const body = await readBody(req);
       const { product, imageBase64 } = JSON.parse(body);
 
+      // First check what scopes our token has by hitting shop endpoint
+      const shopCheck = await shopifyRequest('GET', 'shop.json');
+      console.log('Shop check status:', shopCheck.status);
+
+      // Build product — keep it minimal to avoid scope issues
       const shopifyProduct = {
         title: product.shopify.title,
         body_html: product.shopify.description_html,
-        vendor: product.shopify.vendor,
-        product_type: product.shopify.product_type,
+        vendor: product.shopify.vendor || 'The Pickled Factory',
+        product_type: product.shopify.product_type || 'Acrylic Sign',
         tags: (product.shopify.tags || []).join(', '),
-        handle: product.shopify.url_handle,
-        variants: product.shopify.variants.map(v => ({
-          title: v.title,
+        status: 'draft',
+        variants: (product.shopify.variants || []).map(v => ({
+          option1: v.title,
           price: v.price,
-          sku: v.sku,
-          inventory_management: null,
-          fulfillment_service: 'manual'
+          sku: v.sku
         })),
-        metafields: [
-          { namespace: 'global', key: 'title_tag', value: product.shopify.seo_title, type: 'single_line_text_field' },
-          { namespace: 'global', key: 'description_tag', value: product.shopify.meta_description, type: 'single_line_text_field' }
-        ]
+        options: [{ name: 'Style' }]
       };
 
-      // Add image if provided
-      if (imageBase64) {
-        shopifyProduct.images = [{ attachment: imageBase64, filename: (product.shopify.url_handle || 'product') + '.png' }];
-      }
-
+      console.log('Sending product:', JSON.stringify(shopifyProduct).slice(0, 500));
       const result = await shopifyRequest('POST', 'products.json', { product: shopifyProduct });
+      console.log('Product result status:', result.status);
+      console.log('Product result body:', result.body.slice(0, 1000));
+
       const data = JSON.parse(result.body);
 
       if (result.status === 201) {
+        const productId = data.product.id;
+
+        // Upload image separately if provided
+        if (imageBase64) {
+          const imgResult = await shopifyRequest('POST', `products/${productId}/images.json`, {
+            image: { attachment: imageBase64, filename: (product.shopify.url_handle || 'product') + '.png' }
+          });
+          console.log('Image upload status:', imgResult.status);
+        }
+
         json(res, 200, {
           success: true,
-          product_id: data.product.id,
-          admin_url: `https://admin.shopify.com/store/the-pickled-factory/products/${data.product.id}`,
+          product_id: productId,
+          admin_url: `https://admin.shopify.com/store/the-pickled-factory/products/${productId}`,
           live_url: `https://www.thepickledfactory.com.au/products/${data.product.handle}`
         });
       } else {
-        json(res, result.status, { error: 'Shopify rejected product', details: data });
+        // Return full error detail
+        json(res, 200, {
+          success: false,
+          error: 'Shopify rejected product',
+          status: result.status,
+          details: data
+        });
       }
+    } catch(e) {
+      console.error('Publish product error:', e);
+      json(res, 500, { error: e.message });
+    }
+    return;
+  }
+
+  // Test
+  if (pathname === '/api/test') {
+    try {
+      const shop = await shopifyRequest('GET', 'shop.json');
+      const shopData = JSON.parse(shop.body);
+      json(res, 200, {
+        shopify: shop.status === 200 ? 'connected' : 'failed',
+        shop_name: shopData.shop?.name,
+        anthropic_key: ANTHROPIC_API_KEY ? 'set' : 'missing',
+        shopify_token: SHOPIFY_TOKEN ? 'set' : 'missing'
+      });
     } catch(e) { json(res, 500, { error: e.message }); }
     return;
   }
