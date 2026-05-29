@@ -98,8 +98,8 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
 .variants-table td.mono { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); }
 
 /* Design preview */
-.design-preview { width: 100%; background: var(--surface2); border-radius: 10px; overflow: hidden; display: flex; align-items: center; justify-content: center; padding: 2rem; min-height: 300px; }
-canvas.product-canvas { border-radius: 8px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); max-width: 100%; }
+.design-preview { width: 100%; background: #f0f0f0; border-radius: 10px; overflow: hidden; }
+canvas.product-canvas { width: 100%; display: block; }
 .finish-selector { display: flex; gap: 8px; margin-bottom: 1rem; flex-wrap: wrap; }
 .finish-btn { padding: 6px 14px; border-radius: 999px; border: 1px solid var(--border2); font-size: 12px; color: var(--muted); cursor: pointer; background: var(--surface); font-family: 'DM Sans', sans-serif; transition: all 0.15s; }
 .finish-btn:hover { border-color: var(--gold); color: var(--gold); }
@@ -226,7 +226,7 @@ canvas.product-canvas { border-radius: 8px; box-shadow: 0 20px 60px rgba(0,0,0,0
       <div class="card-hdr"><span class="card-title">Design mockup</span><button class="copy-btn" onclick="dlProductImg()">↓ Download image</button></div>
       <div class="finish-selector" id="finishSelector"></div>
       <div class="design-preview">
-        <canvas id="productCv"></canvas>
+        <canvas id="productCv" style="width:100%;display:block;border-radius:8px;"></canvas>
       </div>
       <p style="font-size:11px;color:var(--muted2);margin-top:8px;">Design mockup showing layout, fonts, and style. Download and use as reference for your production template.</p>
     </div>
@@ -468,111 +468,359 @@ function drawProductDesign(d, finish) {
   const cv = document.getElementById('productCv');
   const design = d.design || {};
   const dims = d.recommended_dimensions_mm || { width: 148, height: 210 };
-  const aspect = dims.height / dims.width;
 
-  // Size canvas to show the product at a nice size
-  const maxW = 320;
-  const W = cv.width = maxW;
-  const H = cv.height = Math.round(maxW * aspect);
+  // Full product image: 1200x1200 white studio background
+  const W = cv.width = 1200;
+  const H = cv.height = 1200;
   const ctx = cv.getContext('2d');
 
-  // Background based on finish
+  // White studio background with subtle gradient
+  const bgGrad = ctx.createLinearGradient(0,0,0,H);
+  bgGrad.addColorStop(0, '#ffffff');
+  bgGrad.addColorStop(1, '#f4f4f4');
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0,0,W,H);
+
+  // Subtle shadow on ground
+  const shadowGrad = ctx.createRadialGradient(W/2, H*0.82, 20, W/2, H*0.82, 340);
+  shadowGrad.addColorStop(0, 'rgba(0,0,0,0.10)');
+  shadowGrad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = shadowGrad;
+  ctx.fillRect(0,0,W,H);
+
+  // Finish colours
   const finishes = {
-    'Clear': { bg: 'rgba(240,245,255,0.95)', text: '#1a1a2e', accent: design.accent_color_hex || '#c8a96e', border: 'rgba(100,130,180,0.3)' },
-    'Frosted': { bg: 'rgba(220,228,240,0.85)', text: '#1a1a2e', accent: design.accent_color_hex || '#c8a96e', border: 'rgba(160,180,210,0.5)' },
-    'Mirror Gold': { bg: '#d4af37', text: '#2a1a00', accent: '#fff', border: '#b8960a' },
-    'Mirror Silver': { bg: '#c0c0c0', text: '#111', accent: '#fff', border: '#999' },
-    'Black': { bg: '#1a1a1a', text: '#f0ede3', accent: design.accent_color_hex || '#c8a96e', border: '#333' },
-    'White': { bg: '#ffffff', text: '#1a1a1a', accent: design.accent_color_hex || '#c8a96e', border: '#ddd' },
+    'Clear':        { bg: 'rgba(232,240,255,0.82)', text: '#1a1a2e', accent: design.accent_color_hex||'#c8a96e', edge: 'rgba(180,200,240,0.6)', gloss: true },
+    'Frosted':      { bg: 'rgba(215,225,238,0.78)', text: '#1a1a2e', accent: design.accent_color_hex||'#c8a96e', edge: 'rgba(190,205,225,0.7)', gloss: false },
+    'Mirror Gold':  { bg: '#c8a830', text: '#fff', accent: '#fff', edge: '#a8880a', gloss: true },
+    'Mirror Silver':{ bg: '#b8c0cc', text: '#fff', accent: '#fff', edge: '#8890a0', gloss: true },
+    'Black':        { bg: '#1e1e1e', text: '#f0ede3', accent: design.accent_color_hex||'#c8a96e', edge: '#111', gloss: true },
+    'White':        { bg: '#ffffff', text: '#1a1a1a', accent: design.accent_color_hex||'#c8a96e', edge: '#ddd', gloss: false },
   };
   const f = finishes[finish] || finishes['Clear'];
-
-  // Background
-  ctx.fillStyle = f.bg;
-  ctx.fillRect(0, 0, W, H);
-
-  // Border/edge effect
-  ctx.strokeStyle = f.border;
-  ctx.lineWidth = 2;
-  ctx.strokeRect(1, 1, W-2, H-2);
-
-  // Inner border
-  ctx.strokeStyle = f.accent + '60';
-  ctx.lineWidth = 0.5;
-  const margin = 12;
-  ctx.strokeRect(margin, margin, W-margin*2, H-margin*2);
-
-  const sample = design.sample_content || {};
-  const heading = sample.heading || d.product_name || 'Menu';
-  const subheading = sample.subheading || '';
-  const items = sample.items || [];
-  const footer = sample.footer || '';
   const accent = f.accent;
   const textColor = f.text;
 
-  // Decorative top line
-  ctx.strokeStyle = accent;
-  ctx.lineWidth = 1;
-  const lm = margin + 16;
-  ctx.beginPath(); ctx.moveTo(lm, margin+18); ctx.lineTo(W-lm, margin+18); ctx.stroke();
-
-  // Main heading
-  ctx.fillStyle = accent;
-  ctx.font = `600 ${Math.round(W*0.072)}px 'Cormorant Garamond', Georgia, serif`;
-  ctx.textAlign = 'center';
-  ctx.fillText(heading, W/2, margin + 42);
-
-  // Thin rule under heading
-  ctx.strokeStyle = accent + '80';
-  ctx.lineWidth = 0.5;
-  ctx.beginPath(); ctx.moveTo(W/2-40, margin+50); ctx.lineTo(W/2+40, margin+50); ctx.stroke();
-
-  // Subheading
-  if (subheading) {
-    ctx.fillStyle = textColor + 'bb';
-    ctx.font = `300 ${Math.round(W*0.036)}px 'Montserrat', sans-serif`;
-    ctx.fillText(subheading, W/2, margin + 65);
+  // Calculate product rect — portrait or landscape based on dims
+  const isPortrait = dims.height >= dims.width;
+  const productMaxW = 480, productMaxH = 560;
+  let pw, ph;
+  if (isPortrait) {
+    ph = productMaxH;
+    pw = Math.round(ph * dims.width / dims.height);
+    if (pw > productMaxW) { pw = productMaxW; ph = Math.round(pw * dims.height / dims.width); }
+  } else {
+    pw = productMaxW;
+    ph = Math.round(pw * dims.height / dims.width);
   }
 
-  // Divider
-  ctx.strokeStyle = accent + '40';
-  ctx.lineWidth = 0.5;
-  ctx.beginPath(); ctx.moveTo(lm, margin+76); ctx.lineTo(W-lm, margin+76); ctx.stroke();
+  // Position: product centered left, text right
+  const px = Math.round(W * 0.26 - pw/2);
+  const py = Math.round(H/2 - ph/2 - 30);
 
-  // Items
-  const itemStartY = margin + 95;
-  const itemSpacing = (H - itemStartY - margin - 40) / Math.max(items.length, 1);
+  // Drop shadow behind product
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.22)';
+  ctx.shadowBlur = 40;
+  ctx.shadowOffsetX = 8;
+  ctx.shadowOffsetY = 16;
+  ctx.fillStyle = f.bg;
+  roundRect(ctx, px, py, pw, ph, 6);
+  ctx.fill();
+  ctx.restore();
+
+  // Product face
+  ctx.save();
+  roundRect(ctx, px, py, pw, ph, 6);
+  ctx.clip();
+
+  // Base fill
+  if (f.gloss) {
+    const gloss = ctx.createLinearGradient(px, py, px+pw, py+ph);
+    gloss.addColorStop(0, lighten(f.bg, 0.18));
+    gloss.addColorStop(0.45, f.bg);
+    gloss.addColorStop(1, darken(f.bg, 0.12));
+    ctx.fillStyle = gloss;
+  } else {
+    ctx.fillStyle = f.bg;
+  }
+  ctx.fillRect(px, py, pw, ph);
+
+  // Gloss sheen top-left
+  if (f.gloss) {
+    const sheen = ctx.createLinearGradient(px, py, px+pw*0.6, py+ph*0.4);
+    sheen.addColorStop(0, 'rgba(255,255,255,0.25)');
+    sheen.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = sheen;
+    ctx.fillRect(px, py, pw, ph);
+  }
+
+  // Product content
+  const m = Math.round(pw * 0.08);
+  const cw = pw - m*2;
+  const sample = design.sample_content || {};
+  const heading = sample.heading || d.product_name || 'Your Custom Text';
+  const subheading = sample.subheading || 'Personalised Just For You';
+  const items = sample.items || [];
+  const footer = sample.footer || '';
+
+  // Top ornamental rule
+  ctx.strokeStyle = accent;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(px+m, py+m+8); ctx.lineTo(px+m+cw, py+m+8); ctx.stroke();
+
+  // Small diamond ornament
+  const dmx = px + pw/2, dmy = py + m + 8;
+  ctx.fillStyle = accent;
+  ctx.save(); ctx.translate(dmx, dmy); ctx.rotate(Math.PI/4);
+  ctx.fillRect(-4,-4,8,8); ctx.restore();
+
+  // Heading
+  const headFS = Math.max(12, Math.round(pw * 0.075));
+  ctx.fillStyle = accent;
+  ctx.font = `600 ${headFS}px 'Cormorant Garamond', Georgia, serif`;
   ctx.textAlign = 'center';
+  wrapText(ctx, heading, px+pw/2, py+m+36, cw, headFS+4);
 
-  items.forEach((item, i) => {
-    const y = itemStartY + (i * itemSpacing);
-    // Dot decorators
-    ctx.fillStyle = accent + '80';
-    ctx.font = `300 ${Math.round(W*0.03)}px 'Montserrat', sans-serif`;
-    ctx.fillText('·', W/2 - 50, y);
-    ctx.fillText('·', W/2 + 50, y);
-    // Item name
-    ctx.fillStyle = textColor;
-    ctx.font = `400 ${Math.round(W*0.044)}px 'Cormorant Garamond', Georgia, serif`;
-    ctx.fillText(item, W/2, y);
-  });
-
-  // Bottom rule
-  ctx.strokeStyle = accent + '60';
+  // Rule
+  ctx.strokeStyle = accent + '55';
   ctx.lineWidth = 0.5;
-  ctx.beginPath(); ctx.moveTo(lm, H-margin-28); ctx.lineTo(W-lm, H-margin-28); ctx.stroke();
+  const ruleY = py + m + 52 + (heading.length > 20 ? headFS : 0);
+  ctx.beginPath(); ctx.moveTo(px+m+cw*0.15, ruleY); ctx.lineTo(px+m+cw*0.85, ruleY); ctx.stroke();
+
+  // Subheading
+  const subFS = Math.max(8, Math.round(pw * 0.038));
+  ctx.fillStyle = textColor + 'aa';
+  ctx.font = `300 ${subFS}px 'Montserrat', sans-serif`;
+  ctx.fillText(subheading.slice(0,35), px+pw/2, ruleY+subFS+4);
+
+  // Divider
+  ctx.strokeStyle = accent + '33';
+  ctx.lineWidth = 0.5;
+  const divY = ruleY + subFS + 14;
+  ctx.beginPath(); ctx.moveTo(px+m, divY); ctx.lineTo(px+m+cw, divY); ctx.stroke();
+
+  // Items list
+  if (items.length > 0) {
+    const listFS = Math.max(8, Math.round(pw * 0.042));
+    const listStartY = divY + listFS + 8;
+    const listSpacing = Math.min((py+ph - m - 30 - listStartY) / items.length, listFS + 10);
+    ctx.textAlign = 'center';
+    items.slice(0,8).forEach((item, i) => {
+      const iy = listStartY + i * listSpacing;
+      ctx.fillStyle = accent + '66';
+      ctx.font = `300 ${Math.round(listFS*0.7)}px sans-serif`;
+      ctx.fillText('—', px+pw/2, iy);
+      ctx.fillStyle = textColor;
+      ctx.font = `400 ${listFS}px 'Cormorant Garamond', Georgia, serif`;
+      ctx.fillText(item, px+pw/2, iy + listFS * 0.9);
+    });
+  } else {
+    // Placeholder text
+    const plFS = Math.max(9, Math.round(pw * 0.042));
+    ctx.fillStyle = textColor + '55';
+    ctx.font = `300 ${plFS}px 'Montserrat', sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText('Your custom content here', px+pw/2, divY + 40);
+    ctx.fillText('We work with you to create', px+pw/2, divY + 60);
+    ctx.fillText('the perfect design', px+pw/2, divY + 80);
+  }
 
   // Footer
   if (footer) {
-    ctx.fillStyle = textColor + '77';
-    ctx.font = `300 ${Math.round(W*0.03)}px 'Montserrat', sans-serif`;
-    ctx.fillText(footer, W/2, H-margin-14);
+    const ftFS = Math.max(7, Math.round(pw * 0.032));
+    ctx.fillStyle = textColor + '66';
+    ctx.font = `300 ${ftFS}px 'Montserrat', sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText(footer, px+pw/2, py+ph-m-8);
   }
 
-  // Bottom decorative line
+  // Bottom rule
   ctx.strokeStyle = accent;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(px+m, py+ph-m-2); ctx.lineTo(px+m+cw, py+ph-m-2); ctx.stroke();
+
+  ctx.restore();
+
+  // Product edge/border
+  ctx.strokeStyle = f.edge;
+  ctx.lineWidth = 1.5;
+  roundRect(ctx, px, py, pw, ph, 6);
+  ctx.stroke();
+
+  // Size label badge on product
+  const sizeLabel = d.recommended_size || `${dims.width}×${dims.height}mm`;
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  const badgeW = 90, badgeH = 22, badgeX = px+pw-badgeW-6, badgeY = py+ph-badgeH-6;
+  roundRect(ctx, badgeX, badgeY, badgeW, badgeH, 4);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.font = '500 11px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(sizeLabel.split('(')[0].trim(), badgeX+badgeW/2, badgeY+15);
+
+  // RIGHT SIDE — product info text
+  const rx = Math.round(W * 0.52);
+  const rw = W - rx - 60;
+  let ry = py + 20;
+
+  // Brand
+  ctx.fillStyle = '#999';
+  ctx.font = '500 13px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.letterSpacing = '0.1em';
+  ctx.fillText('THE PICKLED FACTORY', rx, ry);
+  ry += 30;
+
+  // Product name
+  ctx.fillStyle = '#1a1a1a';
+  ctx.font = `700 ${Math.round(rw * 0.095)}px 'Playfair Display', Georgia, serif`;
+  ry = wrapTextLeft(ctx, d.product_name || 'Custom Acrylic Sign', rx, ry, rw, Math.round(rw*0.095)+8) + 16;
+
+  // Tagline
+  if (d.tagline) {
+    ctx.fillStyle = '#555';
+    ctx.font = `300 17px 'DM Sans', sans-serif`;
+    ry = wrapTextLeft(ctx, d.tagline, rx, ry, rw, 24) + 20;
+  }
+
+  // Divider
+  ctx.strokeStyle = '#e0e0e0';
   ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(lm, H-margin-4); ctx.lineTo(W-lm, H-margin-4); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(rx, ry); ctx.lineTo(rx+rw, ry); ctx.stroke();
+  ry += 24;
+
+  // Material + size specs
+  const specs = [
+    ['Material', d.material || '3mm Premium Acrylic'],
+    ['Recommended size', d.recommended_size || sizeLabel],
+    ['Available finishes', (d.finish_options||['Clear','Frosted','Mirror Gold']).join(', ')],
+    ['Customisation', 'Your text, logo or design'],
+  ];
+  specs.forEach(([label, val]) => {
+    ctx.fillStyle = '#888';
+    ctx.font = '500 11px sans-serif';
+    ctx.fillText(label.toUpperCase(), rx, ry);
+    ry += 16;
+    ctx.fillStyle = '#1a1a1a';
+    ctx.font = '400 15px sans-serif';
+    ry = wrapTextLeft(ctx, val, rx, ry, rw, 20) + 14;
+  });
+
+  ry += 10;
+  // Divider
+  ctx.strokeStyle = '#e0e0e0';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(rx, ry); ctx.lineTo(rx+rw, ry); ctx.stroke();
+  ry += 24;
+
+  // Price
+  ctx.fillStyle = '#888';
+  ctx.font = '500 11px sans-serif';
+  ctx.fillText('FROM', rx, ry);
+  ry += 18;
+  ctx.fillStyle = '#1a1a1a';
+  ctx.font = `700 38px 'DM Sans', sans-serif`;
+  ctx.fillText('$' + (d.pricing?.recommended_retail_aud || '--'), rx, ry+30);
+  ry += 50;
+  ctx.fillStyle = '#888';
+  ctx.font = '400 12px sans-serif';
+  ctx.fillText('AUD · Free shipping Australia-wide', rx, ry);
+  ry += 30;
+
+  // USP bullets
+  const usps = d.market_research?.unique_selling_points || ['Fully customisable design','Premium 3mm acrylic','Fast turnaround'];
+  ry += 10;
+  usps.slice(0,4).forEach(usp => {
+    ctx.fillStyle = design.accent_color_hex || '#c8a96e';
+    ctx.font = '600 14px sans-serif';
+    ctx.fillText('✓', rx, ry);
+    ctx.fillStyle = '#333';
+    ctx.font = '400 14px sans-serif';
+    ry = wrapTextLeft(ctx, usp, rx+20, ry, rw-20, 20) + 8;
+  });
+
+  ry += 16;
+  // CTA button shape
+  const btnW = Math.min(rw, 260), btnH = 44;
+  const btnGrad = ctx.createLinearGradient(rx, ry, rx+btnW, ry+btnH);
+  btnGrad.addColorStop(0, design.accent_color_hex || '#c8a96e');
+  btnGrad.addColorStop(1, darken(design.accent_color_hex || '#c8a96e', 0.15));
+  ctx.fillStyle = btnGrad;
+  roundRect(ctx, rx, ry, btnW, btnH, 8);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.font = '600 15px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('Customise Your Sign', rx + btnW/2, ry + 28);
+  ctx.textAlign = 'left';
+
+  // Bottom watermark
+  ctx.fillStyle = '#bbb';
+  ctx.font = '400 12px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('thepickledfactory.com.au · Custom Acrylic Signs · Made in Australia', W/2, H-28);
+}
+
+// Helpers
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.lineTo(x+w-r, y); ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+  ctx.lineTo(x+w, y+h-r); ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+  ctx.lineTo(x+r, y+h); ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+  ctx.lineTo(x, y+r); ctx.quadraticCurveTo(x, y, x+r, y);
+  ctx.closePath();
+}
+
+function wrapText(ctx, text, x, y, maxW, lineH) {
+  const words = text.split(' ');
+  let line = '', finalY = y;
+  words.forEach((word, i) => {
+    const test = line + word + ' ';
+    if (ctx.measureText(test).width > maxW && line) {
+      ctx.fillText(line.trim(), x, finalY);
+      line = word + ' ';
+      finalY += lineH;
+    } else { line = test; }
+    if (i === words.length-1) { ctx.fillText(line.trim(), x, finalY); }
+  });
+  return finalY;
+}
+
+function wrapTextLeft(ctx, text, x, y, maxW, lineH) {
+  const words = text.split(' ');
+  let line = '', finalY = y;
+  words.forEach((word, i) => {
+    const test = line + word + ' ';
+    if (ctx.measureText(test).width > maxW && line) {
+      ctx.fillText(line.trim(), x, finalY);
+      line = word + ' ';
+      finalY += lineH;
+    } else { line = test; }
+    if (i === words.length-1) { ctx.fillText(line.trim(), x, finalY); finalY += lineH; }
+  });
+  return finalY;
+}
+
+function lighten(hex, amt) {
+  try {
+    let r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+    r = Math.min(255, Math.round(r + (255-r)*amt));
+    g = Math.min(255, Math.round(g + (255-g)*amt));
+    b = Math.min(255, Math.round(b + (255-b)*amt));
+    return `rgb(${r},${g},${b})`;
+  } catch(e) { return hex; }
+}
+
+function darken(hex, amt) {
+  try {
+    let r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+    r = Math.max(0, Math.round(r*(1-amt)));
+    g = Math.max(0, Math.round(g*(1-amt)));
+    b = Math.max(0, Math.round(b*(1-amt)));
+    return `rgb(${r},${g},${b})`;
+  } catch(e) { return hex; }
 }
 
 async function publishProduct() {
