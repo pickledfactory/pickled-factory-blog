@@ -81,7 +81,56 @@ function serveFile(res, filename, contentType) {
     res.writeHead(200, { 'Content-Type': contentType });
     res.end(content);
   } catch(e) {
-    res.writeHead(404); res.end('Not found');
+    // Get OAuth token
+  if (pathname === '/gettoken') {
+    const { code, shop } = parsed.query;
+    if (!code || !shop) {
+      res.writeHead(400, { 'Content-Type': 'text/html' });
+      res.end('<h2>Missing code or shop</h2>');
+      return;
+    }
+    const secret = process.env.SHOPIFY_SECRET;
+    if (!secret) {
+      res.writeHead(500, { 'Content-Type': 'text/html' });
+      res.end('<h2>SHOPIFY_SECRET not set in environment variables</h2>');
+      return;
+    }
+    return new Promise((resolve) => {
+      const payload = JSON.stringify({ client_id: '34e3a11eb75dea3aa503844d8555a97f', client_secret: secret, code });
+      const req = https.request({
+        hostname: shop, path: '/admin/oauth/access_token', method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) }
+      }, (r) => {
+        let body = '';
+        r.on('data', c => body += c);
+        r.on('end', () => {
+          try {
+            const data = JSON.parse(body);
+            if (data.access_token) {
+              res.writeHead(200, { 'Content-Type': 'text/html' });
+              res.end(`<!DOCTYPE html><html><body style="font-family:sans-serif;padding:2rem;background:#0c0c0c;color:#ede9e3;">
+                <h2 style="color:#c8a96e;">✓ New Shopify token!</h2>
+                <p style="margin:1rem 0;">Copy this and update SHOPIFY_TOKEN in Render environment variables:</p>
+                <code style="background:#1c1c1c;padding:1rem;display:block;border-radius:8px;word-break:break-all;font-size:14px;color:#4a9e6e;border:1px solid #333;">${data.access_token}</code>
+                <p style="margin-top:1rem;color:#777;">Render dashboard → Your service → Environment → SHOPIFY_TOKEN → update value → Save → Manual deploy</p>
+              </body></html>`);
+            } else {
+              res.writeHead(400, { 'Content-Type': 'text/html' });
+              res.end('<h2>Error</h2><pre>' + body + '</pre>');
+            }
+          } catch(e) {
+            res.writeHead(500, { 'Content-Type': 'text/html' });
+            res.end('<h2>Parse error</h2><pre>' + e.message + '</pre>');
+          }
+          resolve();
+        });
+      });
+      req.on('error', e => { res.writeHead(500); res.end(e.message); resolve(); });
+      req.write(payload); req.end();
+    });
+  }
+
+  res.writeHead(404); res.end('Not found');
   }
 }
 
@@ -287,6 +336,55 @@ Research and generate a complete product for The Pickled Factory. Return ONLY va
       });
     } catch(e) { json(res, 500, { error: e.message }); }
     return;
+  }
+
+  // Get OAuth token
+  if (pathname === '/gettoken') {
+    const { code, shop } = parsed.query;
+    if (!code || !shop) {
+      res.writeHead(400, { 'Content-Type': 'text/html' });
+      res.end('<h2>Missing code or shop</h2>');
+      return;
+    }
+    const secret = process.env.SHOPIFY_SECRET;
+    if (!secret) {
+      res.writeHead(500, { 'Content-Type': 'text/html' });
+      res.end('<h2>SHOPIFY_SECRET not set in environment variables</h2>');
+      return;
+    }
+    return new Promise((resolve) => {
+      const payload = JSON.stringify({ client_id: '34e3a11eb75dea3aa503844d8555a97f', client_secret: secret, code });
+      const req = https.request({
+        hostname: shop, path: '/admin/oauth/access_token', method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) }
+      }, (r) => {
+        let body = '';
+        r.on('data', c => body += c);
+        r.on('end', () => {
+          try {
+            const data = JSON.parse(body);
+            if (data.access_token) {
+              res.writeHead(200, { 'Content-Type': 'text/html' });
+              res.end(`<!DOCTYPE html><html><body style="font-family:sans-serif;padding:2rem;background:#0c0c0c;color:#ede9e3;">
+                <h2 style="color:#c8a96e;">✓ New Shopify token!</h2>
+                <p style="margin:1rem 0;">Copy this and update SHOPIFY_TOKEN in Render environment variables:</p>
+                <code style="background:#1c1c1c;padding:1rem;display:block;border-radius:8px;word-break:break-all;font-size:14px;color:#4a9e6e;border:1px solid #333;">${data.access_token}</code>
+                <p style="margin-top:1rem;color:#777;">Render dashboard → Your service → Environment → SHOPIFY_TOKEN → update value → Save → Manual deploy</p>
+              </body></html>`);
+            } else {
+              res.writeHead(400, { 'Content-Type': 'text/html' });
+              res.end('<h2>Error</h2><pre>' + body + '</pre>');
+            }
+          } catch(e) {
+            res.writeHead(500, { 'Content-Type': 'text/html' });
+            res.end('<h2>Parse error</h2><pre>' + e.message + '</pre>');
+          }
+          resolve();
+        });
+      });
+      req.on('error', e => { res.writeHead(500); res.end(e.message); resolve(); });
+      req.write(payload); req.end();
+    });
   }
 
   res.writeHead(404); res.end('Not found');
